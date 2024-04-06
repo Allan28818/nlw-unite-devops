@@ -3,19 +3,28 @@ import { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
 
+interface AttendeeProps {
+  id: number;
+  name: string;
+  email: string;
+  eventId: string;
+  checkIn: any;
+  createdAt: Date;
+}
+
 export async function getEventAttendees(app: FastifyInstance) {
-  app
-    .withTypeProvider<ZodTypeProvider>()
-    .get('/events/:eventId/attendees', {
+  app.withTypeProvider<ZodTypeProvider>().get(
+    "/events/:eventId/attendees",
+    {
       schema: {
-        summary: 'Get event attendees',
-        tags: ['events'],
+        summary: "Get event attendees",
+        tags: ["events"],
         params: z.object({
           eventId: z.string().uuid(),
         }),
         querystring: z.object({
           query: z.string().nullish(),
-          pageIndex: z.string().nullish().default('0').transform(Number),
+          pageIndex: z.string().nullish().default("0").transform(Number),
         }),
         response: {
           200: z.object({
@@ -31,10 +40,11 @@ export async function getEventAttendees(app: FastifyInstance) {
             total: z.number(),
           }),
         },
-      }
-    }, async (request, reply) => {
-      const { eventId } = request.params
-      const { pageIndex, query } = request.query
+      },
+    },
+    async (request, reply) => {
+      const { eventId } = request.params;
+      const { pageIndex, query } = request.query;
 
       const [attendees, total] = await Promise.all([
         prisma.attendee.findMany({
@@ -46,46 +56,51 @@ export async function getEventAttendees(app: FastifyInstance) {
             checkIn: {
               select: {
                 createdAt: true,
+              },
+            },
+          },
+          where: query
+            ? {
+                eventId,
+                name: {
+                  contains: query,
+                },
               }
-            }
-          },
-          where: query ? {
-            eventId,
-            name: {
-              contains: query,
-            }
-          } : {
-            eventId,
-          },
+            : {
+                eventId,
+              },
           take: 10,
           skip: pageIndex * 10,
           orderBy: {
-            createdAt: 'desc'
-          }
+            createdAt: "desc",
+          },
         }),
         prisma.attendee.count({
-          where: query ? {
-            eventId,
-            name: {
-              contains: query,
-            }
-          } : {
-            eventId,
-          },
-        })
-      ])
+          where: query
+            ? {
+                eventId,
+                name: {
+                  contains: query,
+                },
+              }
+            : {
+                eventId,
+              },
+        }),
+      ]);
 
-      return reply.send({ 
-        attendees: attendees.map(attendee => {
+      return reply.send({
+        attendees: attendees.map((attendee: AttendeeProps) => {
           return {
             id: attendee.id,
             name: attendee.name,
             email: attendee.email,
             createdAt: attendee.createdAt,
             checkedInAt: attendee.checkIn?.createdAt ?? null,
-          }
+          };
         }),
         total,
-      })
-    })
+      });
+    }
+  );
 }
